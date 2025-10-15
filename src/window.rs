@@ -11,6 +11,7 @@ pub struct State {
     device: Device,                     // the GPU
     queue: Queue,                       // the work queue for submitting commands to the GPU
     config: SurfaceConfiguration,       // the surface settings
+    render_pipeline: RenderPipeline,    // render pipeline handle
     is_surface_configured: bool,
     window: Arc<Window>,
     mouse_pos: (f64, f64)
@@ -90,6 +91,62 @@ impl State {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
+
+        // could also use include_wgsl! macro
+        let shader = device.create_shader_module(
+            ShaderModuleDescriptor { 
+                label: Some("Shader"), 
+                source: ShaderSource::Wgsl(include_str!("shader.wgsl").into()) 
+            }
+        );
+
+        let render_pipeline_layout  = device.create_pipeline_layout(
+            &PipelineLayoutDescriptor { 
+                label: Some("Render Pipeline Layout"), 
+                bind_group_layouts: &[], 
+                push_constant_ranges: &[] 
+            }
+        );
+
+        let render_pipeline = device.create_render_pipeline(
+            &RenderPipelineDescriptor { 
+                label: Some("Render Pipeline"), 
+                layout: Some(&render_pipeline_layout), 
+                vertex: VertexState { 
+                    module: &shader, 
+                    entry_point: Some("vs_main"), 
+                    compilation_options: PipelineCompilationOptions::default(), 
+                    buffers: &[] 
+                }, 
+                fragment: Some(FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: PipelineCompilationOptions::default(), 
+                    targets: &[Some(ColorTargetState { 
+                        format: config.format, 
+                        blend: Some(BlendState::REPLACE), 
+                        write_mask: ColorWrites::ALL 
+                    })]
+                }),
+                primitive: PrimitiveState { 
+                    topology: PrimitiveTopology::TriangleList, 
+                    strip_index_format: None, 
+                    front_face: FrontFace::Ccw, 
+                    cull_mode: Some(Face::Back), 
+                    unclipped_depth: false, 
+                    polygon_mode: PolygonMode::Fill, 
+                    conservative: false 
+                }, 
+                depth_stencil: None,
+                multiview: None, 
+                cache: None,
+                multisample: MultisampleState { 
+                    count: 1, 
+                    mask: !0, 
+                    alpha_to_coverage_enabled: false 
+                }, 
+            }
+        );
         
         Ok(Self {
             surface,
@@ -98,6 +155,7 @@ impl State {
             queue,
             config,
             is_surface_configured: false,
+            render_pipeline,
             mouse_pos: (0.0, 0.0)
         })
     }
@@ -150,7 +208,7 @@ impl State {
         });
 
         {
-            let _render_pass = encoder.begin_render_pass(
+            let mut render_pass = encoder.begin_render_pass(
                 &RenderPassDescriptor { 
                     label: Some("Render Pass"), 
                     color_attachments: &[Some(
@@ -176,6 +234,9 @@ impl State {
                     occlusion_query_set: None 
                 }
             );
+
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
