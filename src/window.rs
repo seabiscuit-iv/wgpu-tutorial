@@ -24,7 +24,7 @@ impl State {
         let instance_descriptor = 
             InstanceDescriptor {
                 #[cfg(target_arch = "wasm32")]
-                backends: Backends::GL,
+                backends: Backends::BROWSER_WEBGPU,
                 #[cfg(not(target_arch = "wasm32"))]
                 backends: Backends::PRIMARY,
                 ..Default::default()
