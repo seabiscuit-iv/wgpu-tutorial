@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 #[cfg(target_arch = "wasm32")]
 use winit::event_loop::{self};
-use winit::{application::ApplicationHandler, event::{KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, keyboard::{PhysicalKey}, window::Window};
+use winit::{application::ApplicationHandler, dpi::{PhysicalSize, Size}, event::{KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, keyboard::PhysicalKey, window::Window};
 
 use wgpu::*;
 
@@ -32,9 +32,23 @@ impl App {
 
 impl ApplicationHandler<State> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        #[allow(unused_mut)]
+        #[allow(unused_mut, unused_assignments)]
         let mut window_attributes = Window::default_attributes();
-
+                    
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            window_attributes =
+                Window::default_attributes()
+                .with_inner_size(
+                    Size::Physical(
+                        PhysicalSize { 
+                            width: 800, 
+                            height: 800 
+                        }
+                    )
+                );
+        }  
+            
         #[cfg(target_arch = "wasm32")]
         {
             use wasm_bindgen::JsCast;

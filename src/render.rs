@@ -4,7 +4,9 @@ use std::sync::Arc;
 use winit::event_loop::{self};
 use winit::{dpi::PhysicalPosition, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
-use wgpu::{wgt::TextureViewDescriptor, *};
+use wgpu::{util::{BufferInitDescriptor, DeviceExt}, wgt::TextureViewDescriptor, *};
+
+use crate::shader_structs::{INDICES, VERTICES, Vertex};
 
 pub struct State {
     surface: Surface<'static>,          // the render target essentially
@@ -13,8 +15,13 @@ pub struct State {
     config: SurfaceConfiguration,       // the surface settings
     brown_render_pipeline: RenderPipeline,    // render pipeline handle
     barycentric_render_pipeline: RenderPipeline,    // render pipeline handle
+    vertex_buffer: Buffer,
+    index_buffer: Buffer,
+
     is_surface_configured: bool,
     triangle_toggle: bool,
+    num_indices: u32,
+
     pub window: Arc<Window>,
     mouse_pos: (f64, f64)
 }
@@ -109,6 +116,22 @@ impl State {
         let brown_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &brown_triangle_shader, config.format);
         let barycentric_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &barycentric_triangle_shader, config.format);
         
+        let vertex_buffer = device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: BufferUsages::VERTEX
+            }
+        );
+
+        let index_buffer = device.create_buffer_init(
+            &BufferInitDescriptor { 
+                label: Some("Index Buffer"), 
+                contents: bytemuck::cast_slice(INDICES), 
+                usage: BufferUsages::INDEX
+            }
+        );
+
         Ok(Self {
             surface,
             window,
@@ -118,8 +141,11 @@ impl State {
             is_surface_configured: false,
             brown_render_pipeline,
             barycentric_render_pipeline,
+            vertex_buffer,
             mouse_pos: (0.0, 0.0),
-            triangle_toggle: true
+            triangle_toggle: true,
+            num_indices: INDICES.len() as u32,
+            index_buffer
         })
     }
 
@@ -200,7 +226,9 @@ impl State {
             );
 
             render_pass.set_pipeline(if self.triangle_toggle { &self.brown_render_pipeline } else { &self.barycentric_render_pipeline });
-            render_pass.draw(0..3, 0..1);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -217,6 +245,8 @@ impl State {
 
 //helper fn for render pipeline descriptors
 fn make_pipeline_desc_from_shader(device: &Device, layout: &PipelineLayout, shader: &ShaderModule, fmt: TextureFormat) -> RenderPipeline {
+    let vertex_buffer_layout = Vertex::desc();
+    
     device.create_render_pipeline(
         &RenderPipelineDescriptor { 
             label: Some("Render Pipeline"), 
@@ -225,7 +255,7 @@ fn make_pipeline_desc_from_shader(device: &Device, layout: &PipelineLayout, shad
                 module: shader, 
                 entry_point: Some("vs_main"), 
                 compilation_options: PipelineCompilationOptions::default(), 
-                buffers: &[] 
+                buffers: &[vertex_buffer_layout] 
             }, 
             fragment: Some(FragmentState {
                 module: shader,
