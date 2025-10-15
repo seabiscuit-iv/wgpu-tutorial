@@ -11,8 +11,10 @@ pub struct State {
     device: Device,                     // the GPU
     queue: Queue,                       // the work queue for submitting commands to the GPU
     config: SurfaceConfiguration,       // the surface settings
-    render_pipeline: RenderPipeline,    // render pipeline handle
+    brown_render_pipeline: RenderPipeline,    // render pipeline handle
+    barycentric_render_pipeline: RenderPipeline,    // render pipeline handle
     is_surface_configured: bool,
+    triangle_toggle: bool,
     window: Arc<Window>,
     mouse_pos: (f64, f64)
 }
@@ -93,12 +95,14 @@ impl State {
         };
 
         // could also use include_wgsl! macro
-        let shader = device.create_shader_module(
+        let brown_triangle_shader = device.create_shader_module(
             ShaderModuleDescriptor { 
                 label: Some("Shader"), 
                 source: ShaderSource::Wgsl(include_str!("shader.wgsl").into()) 
             }
         );
+
+        let barycentric_triangle_shader = device.create_shader_module(include_wgsl!("barycentric.wgsl"));
 
         let render_pipeline_layout  = device.create_pipeline_layout(
             &PipelineLayoutDescriptor { 
@@ -108,18 +112,59 @@ impl State {
             }
         );
 
-        let render_pipeline = device.create_render_pipeline(
+        let brown_render_pipeline = device.create_render_pipeline(
             &RenderPipelineDescriptor { 
                 label: Some("Render Pipeline"), 
                 layout: Some(&render_pipeline_layout), 
                 vertex: VertexState { 
-                    module: &shader, 
+                    module: &brown_triangle_shader, 
                     entry_point: Some("vs_main"), 
                     compilation_options: PipelineCompilationOptions::default(), 
                     buffers: &[] 
                 }, 
                 fragment: Some(FragmentState {
-                    module: &shader,
+                    module: &brown_triangle_shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: PipelineCompilationOptions::default(), 
+                    targets: &[Some(ColorTargetState { 
+                        format: config.format, 
+                        blend: Some(BlendState::REPLACE), 
+                        write_mask: ColorWrites::ALL 
+                    })]
+                }),
+                primitive: PrimitiveState { 
+                    topology: PrimitiveTopology::TriangleList, 
+                    strip_index_format: None, 
+                    front_face: FrontFace::Ccw, 
+                    cull_mode: Some(Face::Back), 
+                    unclipped_depth: false, 
+                    polygon_mode: PolygonMode::Fill, 
+                    conservative: false 
+                }, 
+                depth_stencil: None,
+                multiview: None, 
+                cache: None,
+                multisample: MultisampleState { 
+                    count: 1, 
+                    mask: !0, 
+                    alpha_to_coverage_enabled: false 
+                }, 
+            }
+        );
+
+
+        let barycentric_render_pipeline = device.create_render_pipeline(
+            &RenderPipelineDescriptor { 
+                label: Some("Render Pipeline"), 
+                layout: Some(&render_pipeline_layout), 
+                vertex: VertexState { 
+                    module: &barycentric_triangle_shader, 
+                    entry_point: Some("vs_main"), 
+                    compilation_options: PipelineCompilationOptions::default(), 
+                    buffers: &[] 
+                }, 
+                fragment: Some(FragmentState {
+                    module: &barycentric_triangle_shader,
                     entry_point: Some("fs_main"),
                     compilation_options: PipelineCompilationOptions::default(), 
                     targets: &[Some(ColorTargetState { 
@@ -155,8 +200,10 @@ impl State {
             queue,
             config,
             is_surface_configured: false,
-            render_pipeline,
-            mouse_pos: (0.0, 0.0)
+            brown_render_pipeline,
+            barycentric_render_pipeline,
+            mouse_pos: (0.0, 0.0),
+            triangle_toggle: true
         })
     }
 
@@ -177,9 +224,10 @@ impl State {
         }
     }
 
-    fn handle_key(&self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+    fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
         match (code, is_pressed) {
             (KeyCode::Escape, true) => event_loop.exit(),
+            (KeyCode::Space, true) => self.triangle_toggle = !self.triangle_toggle,
             _ => ()
         }
     }
@@ -235,7 +283,7 @@ impl State {
                 }
             );
 
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_pipeline(if self.triangle_toggle { &self.brown_render_pipeline } else { &self.barycentric_render_pipeline });
             render_pass.draw(0..3, 0..1);
         }
 
