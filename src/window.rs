@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 #[cfg(target_arch = "wasm32")]
 use winit::event_loop::{self};
-use winit::{application::ApplicationHandler, event::{KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, keyboard::{KeyCode, PhysicalKey}, window::Window};
+use winit::{application::ApplicationHandler, dpi::PhysicalPosition, event::{KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, keyboard::{KeyCode, PhysicalKey}, window::Window};
 
 use wgpu::{wgt::TextureViewDescriptor, *};
 
@@ -12,7 +12,8 @@ pub struct State {
     queue: Queue,                       // the work queue for submitting commands to the GPU
     config: SurfaceConfiguration,       // the surface settings
     is_surface_configured: bool,
-    window: Arc<Window>
+    window: Arc<Window>,
+    mouse_pos: (f64, f64)
 }
 
 impl State {
@@ -96,7 +97,8 @@ impl State {
             device,
             queue,
             config,
-            is_surface_configured: false
+            is_surface_configured: false,
+            mouse_pos: (0.0, 0.0)
         })
     }
 
@@ -122,6 +124,10 @@ impl State {
             (KeyCode::Escape, true) => event_loop.exit(),
             _ => ()
         }
+    }
+     
+    fn handle_mouse_moved(&mut self, _event_loop: &ActiveEventLoop, pos: PhysicalPosition<f64>) {
+        self.mouse_pos = (pos.x, pos.y);
     }
 
     fn update(&mut self) {
@@ -153,7 +159,12 @@ impl State {
                             resolve_target: None, 
                             ops: Operations { 
                                 load: LoadOp::Clear(
-                                    Color { r: 0.1, g: 0.2, b: 0.3, a: 1.0 }
+                                    Color { 
+                                        r: self.mouse_pos.0 / self.config.width as f64, 
+                                        g: self.mouse_pos.1 / self.config.height as f64, 
+                                        b: 0.0, 
+                                        a: 1.0 
+                                    }
                                 ), 
                                 store: StoreOp::Store
                             },
@@ -280,7 +291,8 @@ impl ApplicationHandler<State> for App {
                         log::error!("Unable to render {}", e);
                     }
                 }
-            }
+            },
+
             WindowEvent::KeyboardInput { 
                 event: KeyEvent {
                         physical_key: PhysicalKey::Code(code),
@@ -289,6 +301,12 @@ impl ApplicationHandler<State> for App {
                     },
                 ..
             } => state.handle_key(&event_loop, code, key_state.is_pressed()),
+
+            WindowEvent::CursorMoved { 
+                position,
+                ..
+            } => state.handle_mouse_moved(&event_loop, position),
+
             _ => ()
         }
     }
