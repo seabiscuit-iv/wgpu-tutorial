@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bytemuck::{Pod, Zeroable};
 use wgpu::*;
 use nalgebra::*;
@@ -99,6 +101,16 @@ fn spherical_to_cartesian(radius: f32, theta: f32, phi: f32) -> Point3<f32> {
 }
 
 
+pub struct CameraController {
+    pub w: bool,
+    pub a: bool,
+    pub s: bool,
+    pub d: bool,
+    pub e: bool,
+    pub q: bool,
+}
+
+
 pub struct Camera {
     pub sphericals: Vector3<f32>,
     pub target: Point3<f32>,
@@ -106,7 +118,8 @@ pub struct Camera {
     pub aspect_ratio: f32,
     pub fovy: f32,
     pub znear: f32,
-    pub zfar: f32
+    pub zfar: f32,
+    pub cam_controller: CameraController
 }
 
 
@@ -128,6 +141,30 @@ impl Camera {
         let view_proj = proj * view;
 
         opengl_to_wgpu * view_proj
+    }
+
+    pub fn update(&mut self) {
+        if self.cam_controller.e {
+            self.sphericals.x += 0.01;
+        }
+        if self.cam_controller.q {
+            self.sphericals.x -= 0.01;
+        }
+        if self.cam_controller.d {
+            self.sphericals.y += 0.01;
+        }
+        if self.cam_controller.a {
+            self.sphericals.y -= 0.01;
+        }
+        if self.cam_controller.w {
+            self.sphericals.z += 0.01
+        }
+        if self.cam_controller.s {
+            self.sphericals.z -= 0.01
+        }
+
+        self.sphericals.x = self.sphericals.x.clamp(0.1, 50.0);
+        self.sphericals.z = self.sphericals.z.clamp(PI/10.0, 9.0 * PI/10.0);
     }
 }
 

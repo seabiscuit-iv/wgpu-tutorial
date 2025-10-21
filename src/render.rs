@@ -7,7 +7,7 @@ use winit::{dpi::PhysicalPosition, event_loop::ActiveEventLoop, keyboard::KeyCod
 
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, wgt::TextureViewDescriptor, *};
 
-use crate::{render, shader_structs::{Camera, CameraUniform, INDICES, VERTICES, Vertex}};
+use crate::{render, shader_structs::{Camera, CameraController, CameraUniform, INDICES, VERTICES, Vertex}};
 use crate::texture::Texture;
 
 pub struct State {
@@ -181,7 +181,15 @@ impl State {
             aspect_ratio: config.width as f32 / config.height as f32,
             fovy: 45.0,
             zfar: 100.0,
-            znear: 0.1
+            znear: 0.1,
+            cam_controller: CameraController {
+                w: false,
+                a: false,
+                d: false,
+                e: false,
+                q: false,
+                s: false
+            }
         };
 
         let mut camera_uniform = CameraUniform::new();
@@ -281,12 +289,12 @@ impl State {
             (KeyCode::Escape, true) => event_loop.exit(),
             (KeyCode::Space, true) => self.triangle_toggle = !self.triangle_toggle,
 
-            (KeyCode::KeyQ, true) => self.camera.sphericals.x += 0.1,
-            (KeyCode::KeyE, true) => self.camera.sphericals.x -= 0.1,
-            (KeyCode::KeyA, true) => self.camera.sphericals.y -= 2.0 * PI / 10.0,
-            (KeyCode::KeyD, true) => self.camera.sphericals.y += 2.0 * PI / 10.0,
-            (KeyCode::KeyW, true) => self.camera.sphericals.z += PI / 10.0,
-            (KeyCode::KeyS, true) => self.camera.sphericals.z -= PI / 10.0,
+            (KeyCode::KeyQ, x) => self.camera.cam_controller.q = x,
+            (KeyCode::KeyE, x) => self.camera.cam_controller.e = x,
+            (KeyCode::KeyA, x) => self.camera.cam_controller.a = x,
+            (KeyCode::KeyD, x) => self.camera.cam_controller.d = x,
+            (KeyCode::KeyW, x) => self.camera.cam_controller.w = x,
+            (KeyCode::KeyS, x) => self.camera.cam_controller.s = x,
 
             _ => ()
         }
@@ -297,6 +305,8 @@ impl State {
     }
 
     pub fn update(&mut self) {
+        self.camera.update();
+        
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&self.camera);
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
