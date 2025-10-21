@@ -1,6 +1,7 @@
 mod window;
 mod render;
 mod shader_structs;
+mod texture;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::wasm_bindgen;

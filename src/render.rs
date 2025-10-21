@@ -1,12 +1,14 @@
-use std::sync::Arc;
+use std::{f32::consts::PI, sync::Arc};
 
+use nalgebra::Vector3;
 #[cfg(target_arch = "wasm32")]
 use winit::event_loop::{self};
 use winit::{dpi::PhysicalPosition, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, wgt::TextureViewDescriptor, *};
 
-use crate::shader_structs::{INDICES, VERTICES, Vertex};
+use crate::{render, shader_structs::{Camera, CameraUniform, INDICES, VERTICES, Vertex}};
+use crate::texture::Texture;
 
 pub struct State {
     surface: Surface<'static>,          // the render target essentially
@@ -17,6 +19,13 @@ pub struct State {
     barycentric_render_pipeline: RenderPipeline,    // render pipeline handle
     vertex_buffer: Buffer,
     index_buffer: Buffer,
+
+    diffuse_bind_group: BindGroup,
+    diffuse_texture: Texture,
+
+    camera: Camera,
+    camera_buffer: Buffer,
+    camera_bind_group: BindGroup,
 
     is_surface_configured: bool,
     triangle_toggle: bool,
@@ -101,20 +110,53 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
-        let brown_triangle_shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
+        let diffuse_bytes = include_bytes!("../happy-tree.png");
+        let texture = Texture::from_bytes(&device, &queue, diffuse_bytes, "Happy Tree Texture").unwrap();
 
-        let barycentric_triangle_shader = device.create_shader_module(include_wgsl!("barycentric.wgsl"));
+        let texture_bind_group_layout = device.create_bind_group_layout(
+            &BindGroupLayoutDescriptor {
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture { 
+                            sample_type: TextureSampleType::Float { filterable: true }, 
+                            view_dimension: TextureViewDimension::D2, 
+                            multisampled: false
+                        },
+                        count: None
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                        count: None
+                    }
+                ],
+                label: Some("texture_bind_group_layout")
+            },
+        );
 
-        let render_pipeline_layout  = device.create_pipeline_layout(
-            &PipelineLayoutDescriptor { 
-                label: Some("Render Pipeline Layout"), 
-                bind_group_layouts: &[], 
-                push_constant_ranges: &[] 
+        let diffuse_bind_group = device.create_bind_group(
+            &BindGroupDescriptor { 
+                label: Some("Diffuse Bind Group"), 
+                layout: &texture_bind_group_layout, 
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&texture.view)
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&texture.sampler)
+                    }
+                ] 
             }
         );
 
-        let brown_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &brown_triangle_shader, config.format);
-        let barycentric_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &barycentric_triangle_shader, config.format);
+        let brown_triangle_shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
+
+        let barycentric_triangle_shader = device.create_shader_module(include_wgsl!("barycentric.wgsl"));
         
         let vertex_buffer = device.create_buffer_init(
             &BufferInitDescriptor {
@@ -132,6 +174,69 @@ impl State {
             }
         );
 
+        let camera = Camera {
+            sphericals: [4.0, PI / 4.0, PI / 4.0].into(),
+            target: [0.0, 0.0, 0.0].into(),
+            up: Vector3::y(),
+            aspect_ratio: config.width as f32 / config.height as f32,
+            fovy: 45.0,
+            zfar: 100.0,
+            znear: 0.1
+        };
+
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&camera);
+        
+        let camera_buffer = device.create_buffer_init(
+            &BufferInitDescriptor { 
+                label: Some("Camera Uniform Buffer"), 
+                contents: bytemuck::cast_slice(&[camera_uniform]), 
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST 
+            }
+        );
+
+        let camera_bind_group_layout = device.create_bind_group_layout(
+            &BindGroupLayoutDescriptor { 
+                label: Some("Camera Bind Group Layout"), 
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX,
+                        count: None,
+                        ty: BindingType::Buffer { 
+                            ty: BufferBindingType::Uniform, 
+                            has_dynamic_offset: false, 
+                            min_binding_size: None 
+                        }
+                    }
+                ] 
+            }
+        );
+
+        let camera_bind_group = device.create_bind_group(
+            &BindGroupDescriptor { 
+                label: Some("Camera Bind Group"), 
+                layout: &camera_bind_group_layout, 
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: camera_buffer.as_entire_binding()
+                    }
+                ]
+            }
+        );
+        
+        let render_pipeline_layout  = device.create_pipeline_layout(
+            &PipelineLayoutDescriptor { 
+                label: Some("Render Pipeline Layout"), 
+                bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout], 
+                push_constant_ranges: &[] 
+            }
+        );
+
+        let brown_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &brown_triangle_shader, config.format);
+        let barycentric_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &barycentric_triangle_shader, config.format);
+
         Ok(Self {
             surface,
             window,
@@ -145,7 +250,12 @@ impl State {
             mouse_pos: (0.0, 0.0),
             triangle_toggle: true,
             num_indices: INDICES.len() as u32,
-            index_buffer
+            index_buffer,
+            diffuse_bind_group,
+            diffuse_texture: texture,
+            camera,
+            camera_bind_group,
+            camera_buffer
         })
     }
 
@@ -170,6 +280,14 @@ impl State {
         match (code, is_pressed) {
             (KeyCode::Escape, true) => event_loop.exit(),
             (KeyCode::Space, true) => self.triangle_toggle = !self.triangle_toggle,
+
+            (KeyCode::KeyQ, true) => self.camera.sphericals.x += 0.1,
+            (KeyCode::KeyE, true) => self.camera.sphericals.x -= 0.1,
+            (KeyCode::KeyA, true) => self.camera.sphericals.y -= 2.0 * PI / 10.0,
+            (KeyCode::KeyD, true) => self.camera.sphericals.y += 2.0 * PI / 10.0,
+            (KeyCode::KeyW, true) => self.camera.sphericals.z += PI / 10.0,
+            (KeyCode::KeyS, true) => self.camera.sphericals.z -= PI / 10.0,
+
             _ => ()
         }
     }
@@ -179,7 +297,9 @@ impl State {
     }
 
     pub fn update(&mut self) {
-
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&self.camera);
+        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
     }
 
     pub fn render(&mut self) -> Result<(), SurfaceError>{
@@ -208,8 +328,8 @@ impl State {
                             ops: Operations { 
                                 load: LoadOp::Clear(
                                     Color { 
-                                        r: self.mouse_pos.0 / self.config.width as f64, 
-                                        g: self.mouse_pos.1 / self.config.height as f64, 
+                                        r: 0.0, 
+                                        g: 0.0, 
                                         b: 0.0, 
                                         a: 1.0 
                                     }
@@ -228,6 +348,8 @@ impl State {
             render_pass.set_pipeline(if self.triangle_toggle { &self.brown_render_pipeline } else { &self.barycentric_render_pipeline });
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
+            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 

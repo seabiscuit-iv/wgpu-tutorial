@@ -1,47 +1,153 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::*;
-
+use nalgebra::*;
 
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct Vertex {
     position: [f32; 3],
-    color: [f32; 3]
+    color: [f32; 3],
+    tex_coords: [f32; 2]
 }
 
 // triangle
 pub const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.5] }, // A
-    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, // B
-    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.5, 0.0, 0.5] }, // C
-    Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.0, 0.5] }, // D
-    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [0.5, 0.0, 0.5] }, // E
+    // Front face (Z+)
+    Vertex { position: [-0.5, -0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 0.0] },
+    Vertex { position: [ 0.5, -0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 0.0] },
+    Vertex { position: [ 0.5,  0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 1.0] },
+    Vertex { position: [-0.5,  0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 1.0] },
+
+    // Back face (Z-)
+    Vertex { position: [ 0.5, -0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 0.0] },
+    Vertex { position: [-0.5, -0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 0.0] },
+    Vertex { position: [-0.5,  0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 1.0] },
+    Vertex { position: [ 0.5,  0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 1.0] },
+
+    // Left face (X-)
+    Vertex { position: [-0.5, -0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 0.0] },
+    Vertex { position: [-0.5, -0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 0.0] },
+    Vertex { position: [-0.5,  0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 1.0] },
+    Vertex { position: [-0.5,  0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 1.0] },
+
+    // Right face (X+)
+    Vertex { position: [ 0.5, -0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 0.0] },
+    Vertex { position: [ 0.5, -0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 0.0] },
+    Vertex { position: [ 0.5,  0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 1.0] },
+    Vertex { position: [ 0.5,  0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 1.0] },
+
+    // Top face (Y+)
+    Vertex { position: [-0.5,  0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 0.0] },
+    Vertex { position: [ 0.5,  0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 0.0] },
+    Vertex { position: [ 0.5,  0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 1.0] },
+    Vertex { position: [-0.5,  0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 1.0] },
+
+    // Bottom face (Y-)
+    Vertex { position: [-0.5, -0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 0.0] },
+    Vertex { position: [ 0.5, -0.5, -0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 0.0] },
+    Vertex { position: [ 0.5, -0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [1.0, 1.0] },
+    Vertex { position: [-0.5, -0.5,  0.5], color: [1.0, 1.0, 1.0], tex_coords: [0.0, 1.0] },
 ];
 
 pub const INDICES: &[u16] = &[
-    0, 1, 4,
-    1, 2, 4,
-    2, 3, 4,
+    // Front
+    0, 1, 2,
+    2, 3, 0,
+    // Back
+    4, 5, 6,
+    6, 7, 4,
+    // Left
+    8, 9, 10,
+    10, 11, 8,
+    // Right
+    12, 13, 14,
+    14, 15, 12,
+    // Top
+    16, 17, 18,
+    18, 19, 16,
+    // Bottom
+    20, 21, 22,
+    22, 23, 20,
 ];
 
+
 impl Vertex {
+    const ATTRIBS : [VertexAttribute; 3] = vertex_attr_array![
+        0 => Float32x3,
+        1 => Float32x3,
+        2 => Float32x2
+    ];
+
     pub fn desc() -> VertexBufferLayout<'static> {
         VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as BufferAddress,
             step_mode: VertexStepMode::Vertex,
-            attributes: &[
-                VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: VertexFormat::Float32x3
-                },
-                VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as BufferAddress,
-                    shader_location: 1,
-                    format: VertexFormat::Float32x3
-                },
-            ]
+            attributes: &Self::ATTRIBS
         }
     }
 }
+
+
+
+fn spherical_to_cartesian(radius: f32, theta: f32, phi: f32) -> Point3<f32> {
+    Point3::new(
+        radius * phi.sin() * theta.cos(),
+        radius * phi.cos(),
+        radius * phi.sin() * theta.sin(),
+    )
+}
+
+
+pub struct Camera {
+    pub sphericals: Vector3<f32>,
+    pub target: Point3<f32>,
+    pub up: Vector3<f32>,
+    pub aspect_ratio: f32,
+    pub fovy: f32,
+    pub znear: f32,
+    pub zfar: f32
+}
+
+
+impl Camera {
+    pub fn build_view_proj_matrix(&self) -> Matrix4<f32>{
+        let eye = spherical_to_cartesian(self.sphericals.x, self.sphericals.y, self.sphericals.z);
+        let view = Matrix4::look_at_rh(&eye, &self.target, &self.up);
+
+        let persp = Perspective3::new(self.aspect_ratio, self.fovy, self.znear, self.zfar);
+        let proj = persp.to_homogeneous();
+
+        let opengl_to_wgpu = Matrix4::new(
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 0.5, 0.0,
+            0.0, 0.0, 0.5, 1.0,
+        );
+
+        let view_proj = proj * view;
+
+        opengl_to_wgpu * view_proj
+    }
+}
+
+
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CameraUniform {
+    view_proj: [[f32; 4]; 4]
+}
+
+impl CameraUniform {
+    pub fn new() -> Self {
+        Self {
+            view_proj: Matrix4::identity().into()
+        }
+    }
+
+    pub fn update_view_proj(&mut self, camera: &Camera) {
+        self.view_proj = camera.build_view_proj_matrix().into();
+    }
+}
+
