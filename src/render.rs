@@ -7,7 +7,7 @@ use winit::{dpi::PhysicalPosition, event_loop::ActiveEventLoop, keyboard::KeyCod
 
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, wgt::TextureViewDescriptor, *};
 
-use crate::{render, shader_structs::{Camera, CameraController, CameraUniform, INDICES, VERTICES, Vertex}};
+use crate::{shader_structs::{Camera, CameraController, CameraUniform, INDICES, VERTICES, Vertex}};
 use crate::texture::Texture;
 
 pub struct State {
@@ -72,7 +72,7 @@ impl State {
                 required_features: Features::empty(), 
                 required_limits: 
                     if cfg!(target_arch = "wasm32") {
-                        Limits::downlevel_webgl2_defaults()
+                        Limits::downlevel_defaults()
                     } else {
                         Limits::default()
                     }
@@ -100,9 +100,9 @@ impl State {
             height: size.height,
 
             #[cfg(target_arch = "wasm32")]
-            width: size.width.min(2048),
+            width: size.width,
             #[cfg(target_arch = "wasm32")]
-            height: size.height.min(2048),
+            height: size.height,
 
             present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
@@ -276,11 +276,12 @@ impl State {
             }
             #[cfg(target_arch = "wasm32")]
             {
-                self.config.width = width.min(2048);
-                self.config.height = height.min(2048);
+                self.config.width = width;
+                self.config.height = height;
             }
             self.surface.configure(&self.device, &self.config);
             self.is_surface_configured = true;
+            self.camera.aspect_ratio = self.config.width as f32 / self.config.height as f32;
         }
     }
 

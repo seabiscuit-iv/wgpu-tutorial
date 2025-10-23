@@ -26,6 +26,9 @@ impl Texture {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
+                #[cfg(target_arch="wasm32")]
+                format: TextureFormat::Rgba8Unorm,
+                #[cfg(not(target_arch="wasm32"))]
                 format: TextureFormat::Rgba8UnormSrgb,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
                 label,
