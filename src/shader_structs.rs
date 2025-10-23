@@ -1,6 +1,5 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::*;
-use nalgebra::*;
 
 
 #[repr(C)]

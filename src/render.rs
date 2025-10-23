@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
+use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 use winit::{dpi::PhysicalPosition, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 #[cfg(target_arch = "wasm32")]
 use winit::event_loop::{self};
 
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, wgt::TextureViewDescriptor, *};
 
-use crate::camera::*;
+use crate::{camera::*, instance::InstanceRaw};
 use crate::texture::Texture;
 use crate::shader_structs::*;
 use crate::helper::*;
+use crate::instance::Instance;
 
 pub struct State {
     surface: Surface<'static>,          // the render target essentially
@@ -28,6 +30,9 @@ pub struct State {
     camera: Camera,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
+
+    instances: Vec<Instance>,
+    instance_buffer: Buffer,
 
     is_surface_configured: bool,
     triangle_toggle: bool,
@@ -79,6 +84,23 @@ impl State {
         let brown_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &brown_triangle_shader, config.format);
         let barycentric_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &barycentric_triangle_shader, config.format);
 
+        let instances = (0..9).flat_map(|x| {
+            (0..9).map(move |z| {
+                Instance {
+                    position: Vector3::new(2.0 * (x - 4) as f32, 0.0, 2.0 * (z - 4) as f32),
+                    rotation: Quaternion::identity()
+                }
+            })
+        }).collect::<Vec<_>>();
+        let instance_data = instances.iter().map(|x| x.to_raw()).collect::<Vec<_>>();
+        let instance_buffer = device.create_buffer_init(
+            &BufferInitDescriptor { 
+                label: Some("Instance Buffer"), 
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST
+            }
+        );
+
         Ok(Self {
             surface,
             window,
@@ -97,7 +119,9 @@ impl State {
             albedo_texture: texture,
             camera,
             camera_bind_group,
-            camera_buffer
+            camera_buffer,
+            instances,
+            instance_buffer
         })
     }
 
@@ -158,6 +182,10 @@ impl State {
     pub fn update(&mut self) {
         self.camera.update();
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera.get_uniform()]));
+
+        let _ = self.instances.iter_mut().for_each(|x| x.rotation *= UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.1_f32.to_radians()).quaternion());
+        let raw_instances = self.instances.iter().map(|x| x.to_raw()).collect::<Vec<InstanceRaw>>();
+        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&raw_instances));
     }
 
 
@@ -182,10 +210,11 @@ impl State {
         with_default_render_pass(&mut encoder, &view, |render_pass| {
             render_pass.set_pipeline(if self.triangle_toggle { &self.brown_render_pipeline } else { &self.barycentric_render_pipeline });
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
             render_pass.set_bind_group(0, &self.albedo_texture_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
         });
 
         self.queue.submit(std::iter::once(encoder.finish()));

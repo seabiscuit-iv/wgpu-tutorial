@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use winit::window::Window;
 use wgpu::*;
-use crate::shader_structs::Vertex;
+use crate::{instance::InstanceRaw, shader_structs::Vertex};
 
 
 pub fn with_default_render_pass<F>(
@@ -45,6 +45,7 @@ where
 //helper fn for render pipeline descriptors
 pub fn make_pipeline_desc_from_shader(device: &Device, layout: &PipelineLayout, shader: &ShaderModule, fmt: TextureFormat) -> RenderPipeline {
     let vertex_buffer_layout = Vertex::desc();
+    let instance_buffer_layout = InstanceRaw::desc();
     
     device.create_render_pipeline(
         &RenderPipelineDescriptor { 
@@ -54,7 +55,7 @@ pub fn make_pipeline_desc_from_shader(device: &Device, layout: &PipelineLayout, 
                 module: shader, 
                 entry_point: Some("vs_main"), 
                 compilation_options: PipelineCompilationOptions::default(), 
-                buffers: &[vertex_buffer_layout] 
+                buffers: &[vertex_buffer_layout, instance_buffer_layout] 
             }, 
             fragment: Some(FragmentState {
                 module: shader,
