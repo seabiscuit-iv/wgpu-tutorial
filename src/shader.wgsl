@@ -4,13 +4,16 @@ struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) color: vec3<f32>,
     @location(2) tex_coords: vec2<f32>,
+    @location(3) normal: vec3<f32>,
 }
 
 // @builtin(position) is in framebuffer space aka pixel space
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>
+    @location(1) tex_coords: vec2<f32>,
+    @location(2) normal: vec3<f32>,
+    @location(3) pos: vec3<f32>
 };
 
 struct InstanceInput {
@@ -39,6 +42,8 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     var out: VertexOutput;
     out.tex_coords = model.tex_coords;
     out.color = model.color;
+    out.normal = model.normal;
+    out.pos = model.position;
 
     out.clip_position = camera.view_proj * model_matrix * vec4<f32>(model.position, 1.0);
 
@@ -55,12 +60,19 @@ var diff_sampler: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    var light_pos = vec3<f32>(2.0, 2.0, 2.0);
+
     var tex_coords = in.tex_coords;
     tex_coords.y = 1.0 - tex_coords.y;
 
-    let tex_color = textureSample(diff_tex, diff_sampler, tex_coords);
+    let tex_color : vec4<f32> = textureSample(diff_tex, diff_sampler, tex_coords);
 
-    return tex_color;
+    let N = normalize(in.normal);
+    let light_dir = normalize(light_pos - in.pos);
+
+    let diff = max(dot(N, light_dir), 0.0);
+
+    return vec4<f32>(tex_color.xyz * (0.1 + diff), 1.0);
 }
 
 fn convert_color(srgb_color: vec4<f32>) -> vec4<f32> {
