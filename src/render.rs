@@ -7,7 +7,7 @@ use winit::event_loop::{self};
 
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, wgt::TextureViewDescriptor, *};
 
-use crate::{camera::*, instance::InstanceRaw};
+use crate::{camera::*, instance::InstanceRaw, texture};
 use crate::texture::Texture;
 use crate::shader_structs::*;
 use crate::helper::*;
@@ -33,6 +33,8 @@ pub struct State {
 
     instances: Vec<Instance>,
     instance_buffer: Buffer,
+
+    depth_texture: Texture,
 
     is_surface_configured: bool,
     triangle_toggle: bool,
@@ -84,10 +86,10 @@ impl State {
         let brown_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &brown_triangle_shader, config.format);
         let barycentric_render_pipeline = make_pipeline_desc_from_shader(&device, &render_pipeline_layout, &barycentric_triangle_shader, config.format);
 
-        let instances = (0..9).flat_map(|x| {
-            (0..9).map(move |z| {
+        let instances = (0..1).flat_map(|x| {
+            (0..1).map(move |z| {
                 Instance {
-                    position: Vector3::new(2.0 * (x - 4) as f32, 0.0, 2.0 * (z - 4) as f32),
+                    position: Vector3::new(2.0 * (x - 0) as f32, 0.0, 2.0 * (z - 0) as f32),
                     rotation: Quaternion::identity()
                 }
             })
@@ -100,6 +102,8 @@ impl State {
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST
             }
         );
+
+        let depth_texture = Texture::create_depth_texture(&device, &config, "Depth Texture");
 
         Ok(Self {
             surface,
@@ -121,7 +125,8 @@ impl State {
             camera_bind_group,
             camera_buffer,
             instances,
-            instance_buffer
+            instance_buffer,
+            depth_texture
         })
     }
 
@@ -145,6 +150,7 @@ impl State {
             self.surface.configure(&self.device, &self.config);
             self.is_surface_configured = true;
             self.camera.aspect_ratio = self.config.width as f32 / self.config.height as f32;
+            self.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.config, "Depth Texture");
         }
     }
 
@@ -183,9 +189,9 @@ impl State {
         self.camera.update();
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera.get_uniform()]));
 
-        let _ = self.instances.iter_mut().for_each(|x| x.rotation *= UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.1_f32.to_radians()).quaternion());
-        let raw_instances = self.instances.iter().map(|x| x.to_raw()).collect::<Vec<InstanceRaw>>();
-        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&raw_instances));
+        // let _ = self.instances.iter_mut().for_each(|x: &mut Instance| x.rotation *= UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.1_f32.to_radians()).quaternion());
+        // let raw_instances = self.instances.iter().map(|x| x.to_raw()).collect::<Vec<InstanceRaw>>();
+        // self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&raw_instances));
     }
 
 
@@ -207,7 +213,7 @@ impl State {
             label: Some("Render Encoder")
         });
 
-        with_default_render_pass(&mut encoder, &view, |render_pass| {
+        with_default_render_pass(&mut encoder, &view, Some(&self.depth_texture), |render_pass| {
             render_pass.set_pipeline(if self.triangle_toggle { &self.brown_render_pipeline } else { &self.barycentric_render_pipeline });
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));

@@ -1,12 +1,13 @@
 use std::sync::Arc;
 use winit::window::Window;
 use wgpu::*;
-use crate::{instance::InstanceRaw, shader_structs::Vertex};
+use crate::{instance::InstanceRaw, shader_structs::Vertex, texture};
 
 
 pub fn with_default_render_pass<F>(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
+    depth_stencil_attachment: Option<&texture::Texture>,
     draw_fn: F,
 ) 
 where
@@ -33,7 +34,16 @@ where
                     depth_slice: None, 
                 }
             )], 
-            depth_stencil_attachment: None, 
+            depth_stencil_attachment: depth_stencil_attachment.map(|d| {
+                RenderPassDepthStencilAttachment { 
+                    view: &d.view, 
+                    depth_ops: Some(Operations { 
+                        load: LoadOp::Clear(1.0), 
+                        store: StoreOp::Store 
+                    }), 
+                    stencil_ops: None
+                }
+            }), 
             timestamp_writes: None, 
             occlusion_query_set: None 
         }
@@ -76,7 +86,13 @@ pub fn make_pipeline_desc_from_shader(device: &Device, layout: &PipelineLayout, 
                 polygon_mode: PolygonMode::Fill, 
                 conservative: false 
             }, 
-            depth_stencil: None,
+            depth_stencil: Some(DepthStencilState { 
+                format: texture::Texture::DEPTH_FORMAT, 
+                depth_write_enabled: true, 
+                depth_compare: CompareFunction::Less, 
+                stencil: StencilState::default(), 
+                bias: DepthBiasState::default() 
+            }),
             multiview: None, 
             cache: None,
             multisample: MultisampleState { 
