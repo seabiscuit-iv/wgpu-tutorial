@@ -3,6 +3,7 @@ use anyhow::Result;
 use image::GenericImageView;
 
 pub struct Texture {
+    #[allow(unused)]
     pub texture: wgpu::Texture,
     pub view: TextureView,
     pub sampler: Sampler
