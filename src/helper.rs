@@ -1,3 +1,8 @@
+use std::sync::Arc;
+use winit::window::Window;
+use wgpu::*;
+use crate::shader_structs::Vertex;
+
 
 pub fn with_default_render_pass<F>(
     encoder: &mut wgpu::CommandEncoder,
