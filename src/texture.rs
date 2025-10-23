@@ -82,4 +82,53 @@ impl Texture {
         let img = image::load_from_memory(bytes)?;
         Self::from_image(device, queue, &img, Some(label))
     }
+
+
+
+
+    pub fn bind_default_texture(device: &Device, texture: &Texture) -> (BindGroupLayout, BindGroup) {
+        let texture_bind_group_layout = device.create_bind_group_layout(
+            &BindGroupLayoutDescriptor {
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture { 
+                            sample_type: TextureSampleType::Float { filterable: true }, 
+                            view_dimension: TextureViewDimension::D2, 
+                            multisampled: false
+                        },
+                        count: None
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                        count: None
+                    }
+                ],
+                label: Some("texture_bind_group_layout")
+            },
+        );
+
+        let diffuse_bind_group = device.create_bind_group(
+            &BindGroupDescriptor { 
+                label: Some("Diffuse Bind Group"), 
+                layout: &texture_bind_group_layout, 
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&texture.view)
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&texture.sampler)
+                    }
+                ] 
+            }
+        );
+
+        (texture_bind_group_layout, diffuse_bind_group)
+}
+
 }
