@@ -50,6 +50,11 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     return out;
 }
 
+fn rng(seed: f32) -> f32 {
+    let x = fract(sin(seed * 12.9898) * 43758.5453);
+    return x;
+}
+
 
 @group(0) @binding(0)
 var diff_tex: texture_2d<f32>;
@@ -57,10 +62,12 @@ var diff_tex: texture_2d<f32>;
 @group(0) @binding(1)
 var diff_sampler: sampler;
 
+@group(2) @binding(0)
+var<uniform> time: f32;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var light_pos = vec3<f32>(1.5, 3.0, 1.5) * 4.0;
+    var light_pos = vec3<f32>(2 * cos(time), 3.0, 2 * sin(time)) * 4.0;
 
     var tex_coords = in.tex_coords;
     tex_coords.y = 1.0 - tex_coords.y;
@@ -72,9 +79,18 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var diff = max(dot(N, light_dir), 0.0);
 
-    let shadowray_dir = normalize(light_pos - in.pos);
+    const PROBE_DENSITY = 0.1;
+    const STOCHASTIC_SAMPLE_RADIUS = 0.3;
 
-    let ray = Ray(in.pos + N * 0.001, shadowray_dir);
+    var offset = STOCHASTIC_SAMPLE_RADIUS * vec3<f32>(rng(time * in.pos.x), rng(time * in.pos.y), rng(time * in.pos.z)) - (STOCHASTIC_SAMPLE_RADIUS / 2.0);
+
+    var shadowray_pos = in.pos + N * 0.001 + offset;
+
+    shadowray_pos = round(shadowray_pos / PROBE_DENSITY) * PROBE_DENSITY;
+
+    let shadowray_dir = normalize(light_pos - shadowray_pos);
+
+    let ray = Ray(shadowray_pos, shadowray_dir);
     let hitinfo = intersect_unit_cube(ray);
     
     if hitinfo.hit && hitinfo.t_near > 0.001 {

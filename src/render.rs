@@ -7,7 +7,7 @@ use winit::event_loop::{self};
 
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, wgt::TextureViewDescriptor, *};
 
-use crate::{camera::*, instance::InstanceRaw, texture};
+use crate::{camera::*, instance::InstanceRaw, render, texture};
 use crate::texture::Texture;
 use crate::shader_structs::*;
 use crate::helper::*;
@@ -31,6 +31,9 @@ pub struct State {
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
 
+    time_buffer: Buffer,
+    time_bind_group: BindGroup,
+
     instances: Vec<Instance>,
     instance_buffer: Buffer,
 
@@ -41,7 +44,8 @@ pub struct State {
     num_indices: u32,
 
     pub window: Arc<Window>,
-    mouse_pos: (f64, f64)
+    mouse_pos: (f64, f64),
+    start_time: std::time::Instant
 }
 
 impl State {
@@ -55,7 +59,46 @@ impl State {
         let camera = Camera::from_dimensions(config.width, config.height);
         let camera_uniform = camera.get_uniform();
         let (camera_buffer, camera_bind_group_layout, camera_bind_group) = CameraUniform::bind_camera(&camera_uniform, &device);
-                
+
+        let time_buffer = device.create_buffer_init(
+            &BufferInitDescriptor { 
+                label: Some("Time Buffer"), 
+                contents: bytemuck::cast_slice(&[0.0_f32]), 
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST 
+            }
+        );
+
+        let time_bind_group_layout = device.create_bind_group_layout(
+            &BindGroupLayoutDescriptor { 
+                label: Some("Time Bind Group Layout"), 
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        count: None,
+                        ty: BindingType::Buffer { 
+                            ty: BufferBindingType::Uniform, 
+                            has_dynamic_offset: false, 
+                            min_binding_size: None 
+                        },
+                        visibility: ShaderStages::FRAGMENT
+                    }
+                ] 
+            }
+        );
+
+        let time_bind_group = device.create_bind_group(
+            &BindGroupDescriptor { 
+                label: Some("Time Bind Group"), 
+                layout: &time_bind_group_layout, 
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: time_buffer.as_entire_binding()
+                    }
+                ] 
+            }
+        );
+
         let vertex_buffer = device.create_buffer_init(
             &BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
@@ -75,7 +118,7 @@ impl State {
         let render_pipeline_layout  = device.create_pipeline_layout(
             &PipelineLayoutDescriptor { 
                 label: Some("Render Pipeline Layout"), 
-                bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout], 
+                bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout, &time_bind_group_layout], 
                 push_constant_ranges: &[] 
             }
         );
@@ -126,7 +169,10 @@ impl State {
             camera_buffer,
             instances,
             instance_buffer,
-            depth_texture
+            depth_texture,
+            start_time: std::time::Instant::now(),
+            time_buffer,
+            time_bind_group
         })
     }
 
@@ -192,6 +238,9 @@ impl State {
         // let _ = self.instances.iter_mut().for_each(|x: &mut Instance| x.rotation *= UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.1_f32.to_radians()).quaternion());
         // let raw_instances = self.instances.iter().map(|x| x.to_raw()).collect::<Vec<InstanceRaw>>();
         // self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&raw_instances));
+
+        let elapsed = self.start_time.elapsed().as_secs_f32();
+        self.queue.write_buffer(&self.time_buffer, 0, bytemuck::cast_slice(&[elapsed]));
     }
 
 
@@ -220,6 +269,7 @@ impl State {
             render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
             render_pass.set_bind_group(0, &self.albedo_texture_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.time_bind_group, &[]);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
         });
 

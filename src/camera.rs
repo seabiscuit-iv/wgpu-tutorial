@@ -118,7 +118,7 @@ impl CameraUniform {
     }
 
 
-    pub fn bind_camera(cam: &CameraUniform, device: &Device) -> (Buffer, BindGroupLayout, BindGroup) {
+    pub fn  bind_camera(cam: &CameraUniform, device: &Device) -> (Buffer, BindGroupLayout, BindGroup) {
         let camera_buffer = device.create_buffer_init(
             &BufferInitDescriptor { 
                 label: Some("Camera Uniform Buffer"), 
