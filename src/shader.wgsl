@@ -60,7 +60,7 @@ var diff_sampler: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var light_pos = vec3<f32>(2.0, 2.0, 2.0);
+    var light_pos = vec3<f32>(1.5, 3.0, 1.5) * 4.0;
 
     var tex_coords = in.tex_coords;
     tex_coords.y = 1.0 - tex_coords.y;
@@ -70,7 +70,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let N = normalize(in.normal);
     let light_dir = normalize(light_pos - in.pos);
 
-    let diff = max(dot(N, light_dir), 0.0);
+    var diff = max(dot(N, light_dir), 0.0);
+
+    let shadowray_dir = normalize(light_pos - in.pos);
+
+    let ray = Ray(in.pos + N * 0.001, shadowray_dir);
+    let hitinfo = intersect_unit_cube(ray);
+    
+    if hitinfo.hit && hitinfo.t_near > 0.001 {
+        diff = 0.0;
+    }
 
     return vec4<f32>(tex_color.xyz * (0.1 + diff), 1.0);
 }
@@ -81,4 +90,50 @@ fn convert_color(srgb_color: vec4<f32>) -> vec4<f32> {
     rgb_color.g = pow(rgb_color.g, 2.4);
     rgb_color.b = pow(rgb_color.b, 2.4);
     return rgb_color;
+}
+
+struct Ray {
+    origin: vec3<f32>,
+    dir: vec3<f32>,
+};
+
+struct HitInfo {
+    hit: bool,
+    t_near: f32,
+    t_far: f32,
+};
+
+fn intersect_unit_cube(ray: Ray) -> HitInfo {
+    var tmin = -1e10;
+    var tmax =  1e10;
+
+    let bounds_min = vec3<f32>(-0.5, -0.5, -0.5);
+    let bounds_max = vec3<f32>( 0.5,  0.5,  0.5);
+
+    for (var i = 0; i < 3; i = i + 1) {
+        if (abs(ray.dir[i]) < 1e-6) {
+            if (ray.origin[i] < bounds_min[i] || ray.origin[i] > bounds_max[i]) {
+                return HitInfo(false, 0.0, 0.0);
+            }
+        } else {
+            let invD = 1.0 / ray.dir[i];
+            var t0 = (bounds_min[i] - ray.origin[i]) * invD;
+            var t1 = (bounds_max[i] - ray.origin[i]) * invD;
+
+            if (t0 > t1) {
+                let tmp = t0;
+                t0 = t1;
+                t1 = tmp;
+            }
+
+            tmin = max(tmin, t0);
+            tmax = min(tmax, t1);
+
+            if (tmax < tmin) {
+                return HitInfo(false, 0.0, 0.0);
+            }
+        }
+    }
+
+    return HitInfo(true, tmin, tmax);
 }
