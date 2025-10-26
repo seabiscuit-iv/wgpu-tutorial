@@ -1,5 +1,11 @@
 use std::sync::Arc;
 
+#[cfg(target_arch="wasm32")]
+use web_time::Instant;
+
+#[cfg(not(target_arch="wasm32"))]
+use std::time::Instant;
+
 use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 use winit::{dpi::PhysicalPosition, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 #[cfg(target_arch = "wasm32")]
@@ -45,7 +51,7 @@ pub struct State {
 
     pub window: Arc<Window>,
     mouse_pos: (f64, f64),
-    start_time: std::time::Instant
+    start_time: Instant
 }
 
 impl State {
@@ -170,7 +176,7 @@ impl State {
             instances,
             instance_buffer,
             depth_texture,
-            start_time: std::time::Instant::now(),
+            start_time: Instant::now(),
             time_buffer,
             time_bind_group
         })

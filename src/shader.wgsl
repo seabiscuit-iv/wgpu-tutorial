@@ -67,34 +67,48 @@ var<uniform> time: f32;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var light_pos = vec3<f32>(2 * cos(time), 3.0, 2 * sin(time)) * 4.0;
-
     var tex_coords = in.tex_coords;
     tex_coords.y = 1.0 - tex_coords.y;
 
     let tex_color : vec4<f32> = textureSample(diff_tex, diff_sampler, tex_coords);
 
     let N = normalize(in.normal);
-    let light_dir = normalize(light_pos - in.pos);
+    // let light_dir = normalize(light_pos - in.pos);
 
-    var diff = max(dot(N, light_dir), 0.0);
+    // var diff = max(dot(N, light_dir), 0.0);
+    var diff = 1.0;
 
     const PROBE_DENSITY = 0.1;
-    const STOCHASTIC_SAMPLE_RADIUS = 0.3;
+    // const STOCHASTIC_SAMPLE_RADIUS = 0.3;
+    const STOCHASTIC_SAMPLE_RADIUS = 0.0;
+    const NUM_LIGHTS = 20;
+    const NUM_SAMPLES = 3;
+    const PI = 3.14159;
 
-    var offset = STOCHASTIC_SAMPLE_RADIUS * vec3<f32>(rng(time * in.pos.x), rng(time * in.pos.y), rng(time * in.pos.z)) - (STOCHASTIC_SAMPLE_RADIUS / 2.0);
+    let interval = 2 * PI / NUM_LIGHTS;
 
-    var shadowray_pos = in.pos + N * 0.001 + offset;
 
-    shadowray_pos = round(shadowray_pos / PROBE_DENSITY) * PROBE_DENSITY;
+    // for(var l = 0; l < NUM_LIGHTS; l++) {
+        // let i = 1;
+    for(var i = 0; i < NUM_SAMPLES; i++) {
+        let l = i32(rng(time * in.pos.x * f32(i + 4)) * NUM_LIGHTS);
 
-    let shadowray_dir = normalize(light_pos - shadowray_pos);
+        var light_pos = vec3<f32>(2 * cos(time + f32(l) * interval), 3.0, 2 * sin(time + f32(l) * interval)) * 4.0;
 
-    let ray = Ray(shadowray_pos, shadowray_dir);
-    let hitinfo = intersect_unit_cube(ray);
-    
-    if hitinfo.hit && hitinfo.t_near > 0.001 {
-        diff = 0.0;
+        var offset = STOCHASTIC_SAMPLE_RADIUS * vec3<f32>(rng(time * in.pos.x), rng(time * in.pos.y), rng(time * in.pos.z)) - (STOCHASTIC_SAMPLE_RADIUS / 2.0);
+
+        var shadowray_pos = in.pos + N * 0.001 + offset;
+
+        shadowray_pos = round(shadowray_pos / PROBE_DENSITY) * PROBE_DENSITY;
+
+        let shadowray_dir = normalize(light_pos - shadowray_pos);
+
+        let ray = Ray(shadowray_pos, shadowray_dir);
+        let hitinfo = intersect_unit_cube(ray);
+        
+        if hitinfo.hit && hitinfo.t_near > 0.001 {
+            diff = 0.0;
+        }
     }
 
     return vec4<f32>(tex_color.xyz * (0.1 + diff), 1.0);
