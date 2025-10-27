@@ -79,10 +79,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var diff = 0.0;
 
     const PROBE_DENSITY = 0.25;
-    const STOCHASTIC_SAMPLE_RADIUS = 0.3;
+    const STOCHASTIC_SAMPLE_RADIUS = 0.0;
     // const STOCHASTIC_SAMPLE_RADIUS = 0.0;
     const NUM_LIGHTS = 5;
-    const NUM_SAMPLES = 1;
+    const NUM_SAMPLES = 100;
     const PI = 3.14159;
 
     let interval = 2 * PI / NUM_LIGHTS;
@@ -94,7 +94,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         var offset = STOCHASTIC_SAMPLE_RADIUS * vec3<f32>(rng(time * in.pos.x), rng(time * in.pos.y), rng(time * in.pos.z)) - (STOCHASTIC_SAMPLE_RADIUS / 2.0);
 
         var shadowray_pos = in.pos + N * 0.001 + offset;
-        // shadowray_pos = round(shadowray_pos / PROBE_DENSITY) * PROBE_DENSITY;
         shadowray_pos /= PROBE_DENSITY;
 
         // X

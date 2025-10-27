@@ -56,7 +56,7 @@ where
 pub fn make_pipeline_desc_from_shader(device: &Device, layout: &PipelineLayout, shader: &ShaderModule, fmt: TextureFormat) -> RenderPipeline {
     let vertex_buffer_layout = Vertex::desc();
     let instance_buffer_layout = InstanceRaw::desc();
-    
+
     device.create_render_pipeline(
         &RenderPipelineDescriptor { 
             label: Some("Render Pipeline"), 
